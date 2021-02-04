@@ -15,7 +15,7 @@ namespace DataLoad
 	{
 
 
-		static void Main()
+		static async Task Main()
 		{
 
 
@@ -41,64 +41,44 @@ namespace DataLoad
 				ReconnectionBaseDelay = TimeSpan.FromMilliseconds(500)
 			};
 
-			var webSocketConfiguration =
-					new Action<ClientWebSocketOptions>(options =>
-					{
-						options.KeepAliveInterval = TimeSpan.FromSeconds(10);
-					});
+			var webSocketConfiguration = new Action<ClientWebSocketOptions>(options =>
+			{
+				options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+			});
 
-
-			using (var gremlinClient = new GremlinClient(
+			using var gremlinClient = new GremlinClient(
 					gremlinServer,
 					new GraphSON2Reader(),
 					new GraphSON2Writer(),
 					GremlinClient.GraphSON2MimeType,
 					connectionPoolSettings,
-					webSocketConfiguration))
+					webSocketConfiguration);
+
+			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('color').drop()");
+			foreach (var color in result)
 			{
-
-				foreach (var color in result)
-				{
-					Console.WriteLine($"{color.Result.Name}");
-					string query = $"g.addV('color').property('userId', 'catalog').property('id', 'color_{color.Result.Id}').property('name', '{color.Result.Name}').property('rgb', '{color.Result.RGB}').property('isTranslucent', '{color.Result.IsTranslucent}')";
-					var resultSet = SubmitRequest(gremlinClient, query).Result;
-					if (resultSet.Count > 0)
-					{
-						Console.WriteLine("\tResult:");
-						foreach (var resultValue in resultSet)
-						{
-							// The vertex results are formed as Dictionaries with a nested dictionary for their properties
-							string output = JsonConvert.SerializeObject(resultValue);
-							Console.WriteLine($"\t{output}");
-						}
-						Console.WriteLine();
-					}
-
-
-
-				}
-
-
-
-
+				Console.WriteLine($"{color.Result.Name}");
+				string query = $"g.addV('color').property('userId', 'catalog').property('id', 'color_{color.Result.Id}').property('name', '{color.Result.Name}').property('rgb', '{color.Result.RGB}').property('isTranslucent', '{color.Result.IsTranslucent}')";
+				SubmitRequest(gremlinClient, query);
 			}
 
 		}
 
-
-		private static Task<ResultSet<dynamic>> SubmitRequest(GremlinClient gremlinClient, string query)
+		private static void SubmitRequest(GremlinClient gremlinClient, string query)
 		{
 			try
 			{
-				return gremlinClient.SubmitAsync<dynamic>(query);
+				gremlinClient.SubmitAsync<dynamic>(query);
 			}
 			catch (ResponseException e)
 			{
-				Console.WriteLine("\tRequest Error!");
-
-				// Print the Gremlin status code.
-				Console.WriteLine($"\tStatusCode: {e.StatusCode}");
-
+				ConsoleColor backgroundColor = Console.BackgroundColor;
+				ConsoleColor foregroundColor = Console.ForegroundColor;
+				Console.BackgroundColor = ConsoleColor.Red;
+				Console.ForegroundColor = ConsoleColor.White;
+				Console.WriteLine($"\tCosmos query failed — {e.StatusCode}");
+				Console.BackgroundColor = backgroundColor;
+				Console.ForegroundColor = foregroundColor;
 				throw;
 			}
 		}
