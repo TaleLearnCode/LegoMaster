@@ -1,0 +1,19 @@
+g.addV('theme').property('userId', 'schema').property('id', 'schema-theme').property('name', 'theme').property('description', 'A theme in which LEGO is sorted into.').property('properties', 'name: Name of theme').property('properties', 'rebrickableId: Identifier of the theme within the Rebrickable database.').property('properties', 'parentId: Identifier of the theme parent (if any).').property('properties', 'parentName: Name of the theme parent (if any).')
+
+g.addV('set').property('userId', 'schema').property('id', 'schema-set').property('name', 'set').property('description', 'Represents a LEGO set.').property('properties', 'name: Name of the set.').property('properties', 'yearReleased: The year in which the set was released.').property('properties', 'themeId: Identifier of the theme for the set.').property('properties', 'themeName: Name of the theme for the set.').property('properties', 'setNumber: The number for the set as defined by LEGO.')
+
+g.V('schema-set').addE('is of').to(g.V('schema-theme'))
+
+g.addV('category').property('userId', 'schema').property('id', 'schema-category').property('name', 'category').property('description', 'Represents a category of LEGO parts.').property('properties', 'name: Name of the category.')
+
+g.addV('color').property('userId', 'schema').property('id', 'schema-color').property('name', 'color').property('description', 'Represent a color used to produce LEGO.').property('properties', 'name: Community name of the color (not necessarily the official LEGO name for the color).').property('properites', 'rebrickableId: Identifier assigned to the category by Rebrickable.').property('properties', 'rgb: The red-blue-green (RGB) representation for the color.').property('properties', 'isTranslucent: Flag indicating whether the color is translucent.')
+
+g.addV('part').property('userId', 'schema').property('id', 'schema-part').property('name', 'part').property('description', 'Represent an individual LEGO part.').property('properties', 'name: Name of the part.').property('properties', 'partNumber: The LEGO number for the part.').property('properties', 'categoryId: Identifier of the associated category for the part.').property('properties', 'categoryName: Name of the associated category for the part.')
+
+g.V('schema-part').addE('producedIn').to(g.V('schema-color'))
+
+g.V('schema-part').addE('is of').to(g.V('schema-category'))
+
+g.V('schema-part').addE('produced in').to(g.V('schema-color'))
+
+g.V('schema-set').addE('has').to(g.V('schema-part'))
