@@ -44,9 +44,13 @@ namespace DataLoad
 					connectionPoolSettings,
 					webSocketConfiguration);
 
-			await ImportColorsAsync(gremlinClient, @"C:\Users\chadg\Downloads\Lego Database\");
-			await ImportCategoriesAsync(gremlinClient, @"C:\Users\chadg\Downloads\Lego Database\");
-			await ImportThemesAsync(gremlinClient, @"C:\Users\chadg\Downloads\Lego Database\");
+			string filePath = @"C:\Users\chadg\Downloads\Lego Database\";
+
+			//Dictionary<string, Color> colors = await ImportColorsAsync(gremlinClient, filePath);
+			//Dictionary<string, Category> categories = await ImportCategoriesAsync(gremlinClient, filePath);
+			Dictionary<string, Theme> themes = await ImportThemesAsync(gremlinClient, filePath);
+			//Dictionary<string, Part> parts = await ImportPartsAsync(gremlinClient, filePath, categories);
+			Dictionary<string, Set> sets = await ImportSetsAsync(gremlinClient, filePath, themes);
 
 		}
 
@@ -74,77 +78,90 @@ namespace DataLoad
 			return new CsvParserOptions(true, ',');
 		}
 
-		private static async Task ImportColorsAsync(GremlinClient gremlinClient, string filePath = @"C:\Users\chadg\Downloads\Lego Database\")
+		private static async Task<Dictionary<string, Color>> ImportColorsAsync(GremlinClient gremlinClient, string filePath)
 		{
 
 			CsvColorMapping csvMapper = new();
 			CsvParser<Color> csvParser = new(GetCsvParserOptions(), csvMapper);
 
-			var result = csvParser
+			var parseResults = csvParser
 					.ReadFromFile(@$"{filePath}colors.csv", Encoding.ASCII)
 					.ToList();
 
+			Dictionary<string, Color> results = new();
+
 			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('color').drop()");
-			foreach (var color in result)
+			foreach (var color in parseResults)
 			{
 				Console.WriteLine($"{color.Result.Name}");
-				string query = $"g.addV('color').property('userId', 'catalog').property('name', '{color.Result.Name}').property('rgb', '{color.Result.RGB}').property('isTranslucent', '{color.Result.IsTranslucent}').property('rebrickableId', '{color.Result.Id}')";
+				color.Result.Id = Guid.NewGuid().ToString();
+				string query = $"g.addV('color').property('userId', 'catalog').property('id', '{color.Result.Id}').property('name', '{color.Result.Name}').property('rgb', '{color.Result.RGB}').property('isTranslucent', '{color.Result.IsTranslucent}').property('rebrickableId', '{color.Result.RebrickableId}')";
 				SubmitRequest(gremlinClient, query);
+				results.Add(color.Result.RebrickableId, color.Result);
 			}
 
+			return results;
 		}
 
-		private static async Task ImportCategoriesAsync(GremlinClient gremlinClient, string filePath = @"C:\Users\chadg\Downloads\Lego Database\")
+		private static async Task<Dictionary<string, Category>> ImportCategoriesAsync(GremlinClient gremlinClient, string filePath)
 		{
 
 			CsvCategoryMapping csvMapper = new();
 			CsvParser<Category> csvParser = new(GetCsvParserOptions(), csvMapper);
 
-			var result = csvParser
+			var categories = csvParser
 					.ReadFromFile(@$"{filePath}part_categories.csv", Encoding.ASCII)
 					.ToList();
 
+			Dictionary<string, Category> results = new();
+
 			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('category').drop()");
-			foreach (var category in result)
+			string vertexId;
+			foreach (var category in categories)
 			{
 				Console.WriteLine($"{category.Result.Name}");
-				string query = $"g.addV('category').property('userId', 'catalog').property('name', '{category.Result.Name}').property('rebrickableId', '{category.Result.Id}')";
+				category.Result.Id = Guid.NewGuid().ToString();
+				string query = $"g.addV('category').property('id', '{category.Result.Id}').property('userId', 'catalog').property('name', '{category.Result.Name}').property('rebrickableId', '{category.Result.RebrickableId}')";
 				SubmitRequest(gremlinClient, query);
+				results.Add(category.Result.RebrickableId, category.Result);
 			}
+
+			return results;
 
 		}
 
-		private static async Task ImportThemesAsync(GremlinClient gremlinClient, string filePath = @"C:\Users\chadg\Downloads\Lego Database\")
+		private static async Task<Dictionary<string, Theme>> ImportThemesAsync(GremlinClient gremlinClient, string filePath)
 		{
 
 			CsvThemeMapping csvMapper = new();
 			CsvParser<Theme> csvParser = new(GetCsvParserOptions(), csvMapper);
 
-			var result = csvParser
+			var parseResults = csvParser
 					.ReadFromFile(@$"{filePath}themes.csv", Encoding.ASCII)
 					.ToList();
 
 			Dictionary<string, Theme> themes = new();
 			Console.WriteLine("Reading in CSV file...");
-			foreach (var category in result)
+			foreach (var category in parseResults)
 			{
 				if (!themes.ContainsKey(category.Result.RebrickableId))
 				{
-					Theme parentTheme = category.Result;
-					parentTheme.Id = Guid.NewGuid().ToString();
-					parentTheme.Name = parentTheme.Name.Replace("\'", "\\\'");
+					Theme theme = category.Result;
+					theme.Id = Guid.NewGuid().ToString();
+					theme.Name = theme.Name.Replace("\'", "\\\'");
 					themes.Add(category.Result.RebrickableId, category.Result);
 				}
 			}
 
+
+
 			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('theme').drop()");
 			List<string> edges = new();
 			string vertexQuery;
-			string vertexId;
+			Dictionary<string, Theme> results = new();
 			foreach (Theme theme in themes.Values)
 			{
 				Console.WriteLine($"{theme.Name}");
-				vertexId = Guid.NewGuid().ToString();
 				if (string.IsNullOrWhiteSpace(theme.ParentId))
 				{
 					vertexQuery = $"g.addV('theme').property('userId', 'catalog').property('id', '{theme.Id}').property('name', '{theme.Name}').property('rebrickableId', '{theme.RebrickableId}')";
@@ -153,22 +170,153 @@ namespace DataLoad
 				{
 					if (themes.ContainsKey(theme.ParentId))
 					{
-						vertexQuery = $"g.addV('theme').property('userId', 'catalog').property('id', '{vertexId}').property('name', '{theme.Name}').property('rebrickableId', '{theme.RebrickableId}').property('parentId', 'theme_{theme.ParentId}').property('parentName', '{themes[theme.ParentId]}')";
-						edges.Add($"g.V('{vertexId}').addE('isChildOf').to(g.V('{themes[theme.ParentId].Id}'))");
+						vertexQuery = $"g.addV('theme').property('userId', 'catalog').property('id', '{theme.Id}').property('name', '{theme.Name}').property('rebrickableId', '{theme.RebrickableId}').property('parentId', 'theme_{theme.ParentId}').property('parentName', '{themes[theme.ParentId]}')";
+						edges.Add($"g.V('{theme.Id}').addE('isChildOf').to(g.V('{themes[theme.ParentId].Id}'))");
 					}
 					else
 					{
-						vertexQuery = $"g.addV('theme').property('userId', 'catalog').property('id', '{vertexId}').property('name', '{theme.Name}').property('rebrickableId', '{theme.RebrickableId}')";
+						vertexQuery = $"g.addV('theme').property('userId', 'catalog').property('id', '{theme.Id}').property('name', '{theme.Name}').property('rebrickableId', '{theme.RebrickableId}')";
 					}
 				}
 				await gremlinClient.SubmitAsync<dynamic>(vertexQuery);
+				results.Add(theme.RebrickableId, theme);
 			}
 
 			Console.WriteLine("Adding the theme edges...");
 			foreach (string edge in edges)
 				SubmitRequest(gremlinClient, edge);
 
+			return results;
+
 		}
+
+		private static async Task<Dictionary<string, Part>> ImportPartsAsync(GremlinClient gremlinClient, string filePath, Dictionary<string, Category> categories)
+		{
+
+			CsvPartMapping csvMapper = new();
+			CsvParser<Part> csvParser = new(GetCsvParserOptions(), csvMapper);
+
+			var parts = csvParser
+					.ReadFromFile(@$"{filePath}parts.csv", Encoding.ASCII)
+					.ToList();
+
+
+			Dictionary<string, Part> results = new();
+
+			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('part').drop()");
+			StringBuilder query;
+			string edge;
+			foreach (var part in parts)
+			{
+				Console.WriteLine($"{part.Result.Name}");
+				part.Result.Id = Guid.NewGuid().ToString();
+				part.Result.Name = part.Result.Name.Replace("\'", "\\\'");
+				query = new($"g.addV('part').property('id', '{part.Result.Id}').property('userId', 'catalog').property('name', '{part.Result.Name}').property('partNumber', '{part.Result.PartNumber}').property('categoryId', '{part.Result.CategoryId}')");
+				if (categories.ContainsKey(part.Result.CategoryId))
+				{
+					query.Append($".property('categoryName','{categories[part.Result.CategoryId].Name}')");
+					edge = $"g.V('{part.Result.Id}').addE('isOf').to(g.V('{categories[part.Result.CategoryId].Id}'))";
+				}
+				else
+				{
+					edge = string.Empty;
+				}
+				try
+				{
+					await gremlinClient.SubmitAsync<dynamic>(query.ToString());
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine(ex.Message);
+				}
+				try
+				{
+					if (!string.IsNullOrWhiteSpace(edge)) await gremlinClient.SubmitAsync<dynamic>(edge);
+				}
+				catch (Exception ex)
+				{
+					Console.WriteLine(ex.Message);
+				}
+				results.Add(part.Result.PartNumber, part.Result);
+			}
+
+			return results;
+		}
+
+		private static async Task<Dictionary<string, Set>> ImportSetsAsync(GremlinClient gremlinClient, string filePath, Dictionary<string, Theme> themes)
+		{
+
+			CsvSetMapping csvMapper = new();
+			CsvParser<Set> csvParser = new(GetCsvParserOptions(), csvMapper);
+
+			var sets = csvParser
+					.ReadFromFile(@$"{filePath}sets.csv", Encoding.ASCII)
+					.ToList();
+
+
+			Dictionary<string, Set> results = new();
+
+			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('set').drop()");
+			StringBuilder query;
+			string edge;
+			foreach (var set in sets)
+			{
+				Console.WriteLine($"{set.Result.Name}");
+				set.Result.Id = Guid.NewGuid().ToString();
+				set.Result.Name = set.Result.Name.Replace("\'", "\\\'");
+				query = new($"g.addV('set').property('id', '{set.Result.Id}').property('userId', 'catalog').property('name', '{set.Result.Name}').property('setNumber', '{set.Result.SetNumber}').property('year', {set.Result.Year}).property('themeId', '{set.Result.ThemeId}').property('partCount', '{set.Result.PartCount}')");
+				if (themes.ContainsKey(set.Result.ThemeId))
+				{
+					query.Append($".property('themeName','{themes[set.Result.ThemeId].Name}')");
+					edge = $"g.V('{set.Result.Id}').addE('isOf').to(g.V('{themes[set.Result.ThemeId].Id}'))";
+				}
+				else
+				{
+					edge = string.Empty;
+				}
+				await gremlinClient.SubmitAsync<dynamic>(query.ToString());
+				if (!string.IsNullOrWhiteSpace(edge)) await gremlinClient.SubmitAsync<dynamic>(edge);
+				results.Add(set.Result.SetNumber, set.Result);
+			}
+
+			return results;
+		}
+
+		private static async Task ImportSetInventoriesAsync(GremlinClient gremlinClient, string filePath, Dictionary<string, Set> sets, Dictionary<string, Part> parts)
+		{
+
+			Console.WriteLine("Reading in the inventories.csv file...");
+			CsvInventoryMapping csvInventoryMapper = new();
+			CsvParser<Inventory> csvInventoryParser = new(GetCsvParserOptions(), csvInventoryMapper);
+			var parsedInventories = csvInventoryParser
+					.ReadFromFile(@$"{filePath}inventories.csv", Encoding.ASCII)
+					.ToList();
+
+			Console.WriteLine("Reading in the inventory_parts.csv file...");
+			CsvInventoryPartMapping csvInventoryPartMapping = new();
+			CsvParser<InventoryPart> csvInventoryPartParser = new(GetCsvParserOptions(), csvInventoryPartMapping);
+			var parsedInventoryParts = csvInventoryPartParser
+					.ReadFromFile(@$"{filePath}inventory_parts.csv", Encoding.ASCII)
+					.ToList();
+
+			Console.WriteLine("Cleaning out older versions of inventories...");
+			Dictionary<string, Inventory> rawInventories = new();
+			foreach (var parsedInventory in parsedInventories)
+			{
+				if (rawInventories.ContainsKey(parsedInventory.Result.SetNumber))
+					if (rawInventories[parsedInventory.Result.SetNumber].Version < parsedInventory.Result.Version)
+						rawInventories[parsedInventory.Result.SetNumber].Id = parsedInventory.Result.Id;
+					else
+						rawInventories.Add(parsedInventory.Result.SetNumber, parsedInventory.Result);
+			}
+
+
+
+
+
+
+		}
+
 
 	}
 }
