@@ -1,6 +1,7 @@
 ﻿using Gremlin.Net.Driver;
 using Gremlin.Net.Driver.Exceptions;
 using Gremlin.Net.Structure.IO.GraphSON;
+using ShellProgressBar;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -46,11 +47,27 @@ namespace DataLoad
 
 			string filePath = @"C:\Users\chadg\Downloads\Lego Database\";
 
-			//Dictionary<string, Color> colors = await ImportColorsAsync(gremlinClient, filePath);
-			//Dictionary<string, Category> categories = await ImportCategoriesAsync(gremlinClient, filePath);
-			Dictionary<string, Theme> themes = await ImportThemesAsync(gremlinClient, filePath);
-			//Dictionary<string, Part> parts = await ImportPartsAsync(gremlinClient, filePath, categories);
-			Dictionary<string, Set> sets = await ImportSetsAsync(gremlinClient, filePath, themes);
+			const int overallSteps = 6;
+			using ProgressBar progressBar = new(overallSteps, "Colors - Parsing CSV", GetParentProgressBarOptions());
+
+			Dictionary<string, Color> colors = await ImportColorsAsync(gremlinClient, filePath, progressBar);
+
+			progressBar.Tick("Categories - Parsing CSV");
+			Dictionary<string, Category> categories = await ImportCategoriesAsync(gremlinClient, filePath, progressBar);
+
+			progressBar.Tick("Themes - Parsing CSV");
+			Dictionary<string, Theme> themes = await ImportThemesAsync(gremlinClient, filePath, progressBar);
+
+			progressBar.Tick("Parts - Parsing CSV");
+			Dictionary<string, Part> parts = await ImportPartsAsync(gremlinClient, filePath, categories, progressBar);
+
+			progressBar.Tick("Sets - Parsing CSV");
+			Dictionary<string, Set> sets = await ImportSetsAsync(gremlinClient, filePath, themes, progressBar);
+
+			progressBar.Tick("Inventories - Parsing Inventories.csv");
+			ImportSetInventories(gremlinClient, filePath, sets, parts, colors, progressBar);
+
+			progressBar.Tick();
 
 		}
 
@@ -78,71 +95,82 @@ namespace DataLoad
 			return new CsvParserOptions(true, ',');
 		}
 
-		private static async Task<Dictionary<string, Color>> ImportColorsAsync(GremlinClient gremlinClient, string filePath)
+		private static async Task<Dictionary<string, Color>> ImportColorsAsync(GremlinClient gremlinClient, string filePath, ProgressBar progressBar)
 		{
 
 			CsvColorMapping csvMapper = new();
 			CsvParser<Color> csvParser = new(GetCsvParserOptions(), csvMapper);
-
-			var parseResults = csvParser
+			var parsedResults = csvParser
 					.ReadFromFile(@$"{filePath}colors.csv", Encoding.ASCII)
 					.ToList();
 
 			Dictionary<string, Color> results = new();
 
+			progressBar.Message = "Colors - Dropping Existing Vertices";
 			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('color').drop()");
-			foreach (var color in parseResults)
+
+			int counter = 1;
+			using ChildProgressBar childProgressBar = progressBar.Spawn(parsedResults.Count, $"{counter} of {parsedResults.Count}", GetChildProgressBarOptions());
+			foreach (var parsedResult in parsedResults)
 			{
-				Console.WriteLine($"{color.Result.Name}");
-				color.Result.Id = Guid.NewGuid().ToString();
-				string query = $"g.addV('color').property('userId', 'catalog').property('id', '{color.Result.Id}').property('name', '{color.Result.Name}').property('rgb', '{color.Result.RGB}').property('isTranslucent', '{color.Result.IsTranslucent}').property('rebrickableId', '{color.Result.RebrickableId}')";
+				Color color = parsedResult.Result;
+				color.Id = Guid.NewGuid().ToString();
+				string query = $"g.addV('color').property('userId', 'catalog').property('id', '{color.Id}').property('name', '{color.Name}').property('rgb', '{color.RGB}').property('isTranslucent', '{color.IsTranslucent}').property('rebrickableId', '{color.RebrickableId}')";
 				SubmitRequest(gremlinClient, query);
-				results.Add(color.Result.RebrickableId, color.Result);
+				results.Add(color.RebrickableId, color);
+				counter++;
+				childProgressBar.Tick($"{counter} of {parsedResults.Count}");
 			}
 
 			return results;
 		}
 
-		private static async Task<Dictionary<string, Category>> ImportCategoriesAsync(GremlinClient gremlinClient, string filePath)
+		private static async Task<Dictionary<string, Category>> ImportCategoriesAsync(GremlinClient gremlinClient, string filePath, ProgressBar progressBar)
 		{
 
 			CsvCategoryMapping csvMapper = new();
 			CsvParser<Category> csvParser = new(GetCsvParserOptions(), csvMapper);
-
-			var categories = csvParser
+			var parsedResults = csvParser
 					.ReadFromFile(@$"{filePath}part_categories.csv", Encoding.ASCII)
 					.ToList();
 
 			Dictionary<string, Category> results = new();
 
+			progressBar.Message = "Categories - Dropping Existing Vertices";
 			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('category').drop()");
-			string vertexId;
-			foreach (var category in categories)
+
+			int counter = 1;
+			using ChildProgressBar childProgressBar = progressBar.Spawn(parsedResults.Count, $"{counter} of {parsedResults.Count}", GetChildProgressBarOptions());
+			foreach (var parsedResult in parsedResults)
 			{
-				Console.WriteLine($"{category.Result.Name}");
-				category.Result.Id = Guid.NewGuid().ToString();
-				string query = $"g.addV('category').property('id', '{category.Result.Id}').property('userId', 'catalog').property('name', '{category.Result.Name}').property('rebrickableId', '{category.Result.RebrickableId}')";
+				//Console.WriteLine($"{category.Result.Name}");
+				Category category = parsedResult.Result;
+				category.Id = Guid.NewGuid().ToString();
+				string query = $"g.addV('category').property('id', '{category.Id}').property('userId', 'catalog').property('name', '{category.Name}').property('rebrickableId', '{category.RebrickableId}')";
 				SubmitRequest(gremlinClient, query);
-				results.Add(category.Result.RebrickableId, category.Result);
+				results.Add(category.RebrickableId, category);
+				counter++;
+				childProgressBar.Tick($"{counter} of {parsedResults.Count}");
 			}
 
 			return results;
 
 		}
 
-		private static async Task<Dictionary<string, Theme>> ImportThemesAsync(GremlinClient gremlinClient, string filePath)
+		private static async Task<Dictionary<string, Theme>> ImportThemesAsync(GremlinClient gremlinClient, string filePath, ProgressBar progressBar)
 		{
 
 			CsvThemeMapping csvMapper = new();
 			CsvParser<Theme> csvParser = new(GetCsvParserOptions(), csvMapper);
-
-			var parseResults = csvParser
+			var parsedResults = csvParser
 					.ReadFromFile(@$"{filePath}themes.csv", Encoding.ASCII)
 					.ToList();
 
+			progressBar.Message = "Themes - Reformatting Raw Data";
+			int counter = 1;
+			using ChildProgressBar childProgressBar = progressBar.Spawn(parsedResults.Count, $"{counter} of {parsedResults.Count}", GetChildProgressBarOptions());
 			Dictionary<string, Theme> themes = new();
-			Console.WriteLine("Reading in CSV file...");
-			foreach (var category in parseResults)
+			foreach (var category in parsedResults)
 			{
 				if (!themes.ContainsKey(category.Result.RebrickableId))
 				{
@@ -151,11 +179,16 @@ namespace DataLoad
 					theme.Name = theme.Name.Replace("\'", "\\\'");
 					themes.Add(category.Result.RebrickableId, category.Result);
 				}
+				counter++;
+				childProgressBar.Tick($"{counter} of {parsedResults.Count}");
 			}
 
-
-
+			progressBar.Message = "Themes - Dropping Existing Vertices";
 			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('theme').drop()");
+
+			progressBar.Message = "Themes - Creating Vertices";
+			using ChildProgressBar vertexProgressBar = progressBar.Spawn(themes.Count, $"{counter} of {themes.Count}", GetChildProgressBarOptions());
+			counter = 1;
 			List<string> edges = new();
 			string vertexQuery;
 			Dictionary<string, Theme> results = new();
@@ -180,95 +213,53 @@ namespace DataLoad
 				}
 				await gremlinClient.SubmitAsync<dynamic>(vertexQuery);
 				results.Add(theme.RebrickableId, theme);
+				counter++;
+				vertexProgressBar.Tick($"{counter} of {themes.Count}");
 			}
 
-			Console.WriteLine("Adding the theme edges...");
+			counter = 1;
+			using ChildProgressBar edgeProgressBar = progressBar.Spawn(edges.Count, $"{counter} of {edges.Count}", GetChildProgressBarOptions());
 			foreach (string edge in edges)
+			{
 				SubmitRequest(gremlinClient, edge);
+				counter++;
+				vertexProgressBar.Tick($"{counter} of {edges.Count}");
+			}
 
 			return results;
 
 		}
 
-		private static async Task<Dictionary<string, Part>> ImportPartsAsync(GremlinClient gremlinClient, string filePath, Dictionary<string, Category> categories)
+		private static async Task<Dictionary<string, Part>> ImportPartsAsync(GremlinClient gremlinClient, string filePath, Dictionary<string, Category> categories, ProgressBar progressBar)
 		{
 
 			CsvPartMapping csvMapper = new();
 			CsvParser<Part> csvParser = new(GetCsvParserOptions(), csvMapper);
-
-			var parts = csvParser
+			var parsedResults = csvParser
 					.ReadFromFile(@$"{filePath}parts.csv", Encoding.ASCII)
 					.ToList();
 
 
 			Dictionary<string, Part> results = new();
 
+			progressBar.Message = "Parts - Dropping Existing Vertices";
 			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('part').drop()");
+
+			progressBar.Message = "Parts - Creating Vertices";
+			int counter = 1;
+			using ChildProgressBar childProgressBar = progressBar.Spawn(parsedResults.Count, $"{counter} of {parsedResults.Count}", GetChildProgressBarOptions());
 			StringBuilder query;
 			string edge;
-			foreach (var part in parts)
+			foreach (var parsedResult in parsedResults)
 			{
-				Console.WriteLine($"{part.Result.Name}");
-				part.Result.Id = Guid.NewGuid().ToString();
-				part.Result.Name = part.Result.Name.Replace("\'", "\\\'");
-				query = new($"g.addV('part').property('id', '{part.Result.Id}').property('userId', 'catalog').property('name', '{part.Result.Name}').property('partNumber', '{part.Result.PartNumber}').property('categoryId', '{part.Result.CategoryId}')");
-				if (categories.ContainsKey(part.Result.CategoryId))
+				Part part = parsedResult.Result;
+				part.Id = Guid.NewGuid().ToString();
+				part.Name = parsedResult.Result.Name.Replace("\'", "\\\'");
+				query = new($"g.addV('part').property('id', '{part.Id}').property('userId', 'catalog').property('name', '{part.Name}').property('partNumber', '{part.PartNumber}').property('categoryId', '{part.CategoryId}')");
+				if (categories.TryGetValue(part.CategoryId, out Category category))
 				{
-					query.Append($".property('categoryName','{categories[part.Result.CategoryId].Name}')");
-					edge = $"g.V('{part.Result.Id}').addE('isOf').to(g.V('{categories[part.Result.CategoryId].Id}'))";
-				}
-				else
-				{
-					edge = string.Empty;
-				}
-				try
-				{
-					await gremlinClient.SubmitAsync<dynamic>(query.ToString());
-				}
-				catch (Exception ex)
-				{
-					Console.WriteLine(ex.Message);
-				}
-				try
-				{
-					if (!string.IsNullOrWhiteSpace(edge)) await gremlinClient.SubmitAsync<dynamic>(edge);
-				}
-				catch (Exception ex)
-				{
-					Console.WriteLine(ex.Message);
-				}
-				results.Add(part.Result.PartNumber, part.Result);
-			}
-
-			return results;
-		}
-
-		private static async Task<Dictionary<string, Set>> ImportSetsAsync(GremlinClient gremlinClient, string filePath, Dictionary<string, Theme> themes)
-		{
-
-			CsvSetMapping csvMapper = new();
-			CsvParser<Set> csvParser = new(GetCsvParserOptions(), csvMapper);
-
-			var sets = csvParser
-					.ReadFromFile(@$"{filePath}sets.csv", Encoding.ASCII)
-					.ToList();
-
-
-			Dictionary<string, Set> results = new();
-
-			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('set').drop()");
-			StringBuilder query;
-			string edge;
-			foreach (var set in sets)
-			{
-				Console.WriteLine($"{set.Result.Name}");
-				set.Result.Id = Guid.NewGuid().ToString();
-				set.Result.Name = set.Result.Name.Replace("\'", "\\\'");
-				query = new($"g.addV('set').property('id', '{set.Result.Id}').property('userId', 'catalog').property('name', '{set.Result.Name}').property('setNumber', '{set.Result.SetNumber}').property('year', {set.Result.Year}).property('themeId', '{set.Result.ThemeId}').property('partCount', '{set.Result.PartCount}')");
-				if (themes.ContainsKey(set.Result.ThemeId))
-				{
-					query.Append($".property('themeName','{themes[set.Result.ThemeId].Name}')");
-					edge = $"g.V('{set.Result.Id}').addE('isOf').to(g.V('{themes[set.Result.ThemeId].Id}'))";
+					query.Append($".property('categoryName','{category.Name}')");
+					edge = $"g.V('{parsedResult.Result.Id}').addE('isOf').to(g.V('{category.Id}'))";
 				}
 				else
 				{
@@ -276,47 +267,128 @@ namespace DataLoad
 				}
 				await gremlinClient.SubmitAsync<dynamic>(query.ToString());
 				if (!string.IsNullOrWhiteSpace(edge)) await gremlinClient.SubmitAsync<dynamic>(edge);
-				results.Add(set.Result.SetNumber, set.Result);
+				results.Add(parsedResult.Result.PartNumber, part);
+				counter++;
+				childProgressBar.Tick($"{counter} of {parsedResults.Count}");
+			}
+
+			return results;
+
+		}
+
+		private static async Task<Dictionary<string, Set>> ImportSetsAsync(GremlinClient gremlinClient, string filePath, Dictionary<string, Theme> themes, ProgressBar progressBar)
+		{
+
+			CsvSetMapping csvMapper = new();
+			CsvParser<Set> csvParser = new(GetCsvParserOptions(), csvMapper);
+			var parsedResults = csvParser
+					.ReadFromFile(@$"{filePath}sets.csv", Encoding.ASCII)
+					.ToList();
+
+			progressBar.Message = "Categories - Dropping Existing Vertices";
+			await gremlinClient.SubmitAsync<dynamic>("g.V().has('userId', 'catalog').hasLabel('set').drop()");
+
+			Dictionary<string, Set> results = new();
+			StringBuilder query;
+			string edge;
+			int counter = 1;
+			using ChildProgressBar childProgressBar = progressBar.Spawn(parsedResults.Count, $"{counter} of {parsedResults.Count}", GetChildProgressBarOptions());
+			foreach (var parsedResult in parsedResults)
+			{
+				Set set = parsedResult.Result;
+				set.Id = Guid.NewGuid().ToString();
+				parsedResult.Result.Name = set.Name.Replace("\'", "\\\'");
+				query = new($"g.addV('set').property('id', '{set.Id}').property('userId', 'catalog').property('name', '{set.Name}').property('setNumber', '{set.SetNumber}').property('year', {set.Year}).property('themeId', '{set.ThemeId}').property('partCount', '{set.PartCount}')");
+				if (themes.TryGetValue(set.ThemeId, out Theme theme))
+				{
+					query.Append($".property('themeName','{theme.Name}')");
+					edge = $"g.V('{set.Id}').addE('isOf').to(g.V('{theme.Id}'))";
+				}
+				else
+				{
+					edge = string.Empty;
+				}
+				await gremlinClient.SubmitAsync<dynamic>(query.ToString());
+				if (!string.IsNullOrWhiteSpace(edge)) await gremlinClient.SubmitAsync<dynamic>(edge);
+				results.Add(parsedResult.Result.SetNumber, set);
+				counter++;
+				childProgressBar.Tick($"{counter} of {parsedResults.Count}");
 			}
 
 			return results;
 		}
 
-		private static async Task ImportSetInventoriesAsync(GremlinClient gremlinClient, string filePath, Dictionary<string, Set> sets, Dictionary<string, Part> parts)
+		private static void ImportSetInventories(GremlinClient gremlinClient, string filePath, Dictionary<string, Set> sets, Dictionary<string, Part> parts, Dictionary<string, Color> colors, ProgressBar progressBar)
 		{
 
-			Console.WriteLine("Reading in the inventories.csv file...");
 			CsvInventoryMapping csvInventoryMapper = new();
 			CsvParser<Inventory> csvInventoryParser = new(GetCsvParserOptions(), csvInventoryMapper);
 			var parsedInventories = csvInventoryParser
 					.ReadFromFile(@$"{filePath}inventories.csv", Encoding.ASCII)
 					.ToList();
 
-			Console.WriteLine("Reading in the inventory_parts.csv file...");
+			progressBar.Message = "Inventories - Parsing Inventories_Parts.csv";
 			CsvInventoryPartMapping csvInventoryPartMapping = new();
 			CsvParser<InventoryPart> csvInventoryPartParser = new(GetCsvParserOptions(), csvInventoryPartMapping);
 			var parsedInventoryParts = csvInventoryPartParser
 					.ReadFromFile(@$"{filePath}inventory_parts.csv", Encoding.ASCII)
 					.ToList();
 
-			Console.WriteLine("Cleaning out older versions of inventories...");
-			Dictionary<string, Inventory> rawInventories = new();
+			progressBar.Message = "Inventories - Removing older versions of inventories";
+			int counter = 1;
+			using ChildProgressBar cleanupProgressBar = progressBar.Spawn(parsedInventories.Count, $"{counter} of {parsedInventories.Count}", GetChildProgressBarOptions());
+			Dictionary<string, Inventory> inventories = new();
 			foreach (var parsedInventory in parsedInventories)
 			{
-				if (rawInventories.ContainsKey(parsedInventory.Result.SetNumber))
-					if (rawInventories[parsedInventory.Result.SetNumber].Version < parsedInventory.Result.Version)
-						rawInventories[parsedInventory.Result.SetNumber].Id = parsedInventory.Result.Id;
+				if (inventories.ContainsKey(parsedInventory.Result.SetNumber))
+					if (inventories[parsedInventory.Result.SetNumber].Version < parsedInventory.Result.Version)
+						inventories[parsedInventory.Result.SetNumber].Id = parsedInventory.Result.Id;
 					else
-						rawInventories.Add(parsedInventory.Result.SetNumber, parsedInventory.Result);
+						inventories.Add(parsedInventory.Result.SetNumber, parsedInventory.Result);
+				counter++;
+				cleanupProgressBar.Tick($"{counter} of {parsedInventories.Count}");
 			}
 
-
-
-
-
+			progressBar.Message = "Inventories - Creating Edges";
+			counter = 1;
+			using ChildProgressBar edgeProgressBar = progressBar.Spawn(parsedInventoryParts.Count, $"{counter} of {parsedInventoryParts.Count}", GetChildProgressBarOptions());
+			foreach (var parsedInventoryPart in parsedInventoryParts)
+			{
+				InventoryPart inventoryPart = parsedInventoryPart.Result;
+				if (inventories.TryGetValue(inventoryPart.InventoryId, out Inventory inventory))
+					if (parts.TryGetValue(inventoryPart.PartNumber, out Part part))
+						if (sets.TryGetValue(inventory.SetNumber, out Set set))
+						{
+							StringBuilder edgeGremlin = new($"g.V('{set.Id}').addE('has').to(g.V('{part.Id}')).property('colorRebrickableId', '{inventoryPart.ColorId}').property('isSpare', '{inventoryPart.IsSpare}')");
+							if (colors.TryGetValue(inventoryPart.ColorId, out Color color))
+								edgeGremlin.Append($".property('colorId', '{color.Id}').property('colorName', '{color.Name}')");
+							SubmitRequest(gremlinClient, edgeGremlin.ToString());
+						}
+				counter++;
+				edgeProgressBar.Tick($"{counter} of {parsedInventoryParts.Count}");
+			}
 
 		}
 
+		private static ProgressBarOptions GetParentProgressBarOptions()
+		{
+			return new ProgressBarOptions()
+			{
+				ForegroundColor = ConsoleColor.Yellow,
+				BackgroundColor = ConsoleColor.DarkYellow,
+				ProgressCharacter = '─'
+			};
+		}
+
+		private static ProgressBarOptions GetChildProgressBarOptions()
+		{
+			return new ProgressBarOptions()
+			{
+				ForegroundColor = ConsoleColor.Green,
+				BackgroundColor = ConsoleColor.DarkGreen,
+				ProgressCharacter = '─'
+			};
+		}
 
 	}
 }
