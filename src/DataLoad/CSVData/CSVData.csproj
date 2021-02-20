@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+    <AssemblyName>TaleLearnCode.LegoMaster.CSVData</AssemblyName>
+    <RootNamespace>TaleLearnCode.LegoMaster.CSVData</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Gremlin.Net" Version="3.4.10" />
+    <PackageReference Include="ShellProgressBar" Version="5.1.0" />
+    <PackageReference Include="TinyCsvParser" Version="2.6.0" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+    <AssemblyName>TaleLearnCode.LEGOMaster.DataImportConsole</AssemblyName>
+    <RootNamespace>TaleLearnCode.LEGOMaster.DataImportConsole</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ShellProgressBar" Version="5.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DataImport\DataImport.csproj" />
+  </ItemGroup>
+
+</Project>
