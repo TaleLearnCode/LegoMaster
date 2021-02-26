@@ -351,3 +351,4 @@ MigrationBackup/
 /src/DataLoad/DataLoad/Settings.cs
 /src/DataImport/Settings.cs
 /src/DataImportConsole/Settings.cs
+/src/ConsoleApp1/Settings.cs
