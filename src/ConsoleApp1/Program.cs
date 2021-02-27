@@ -23,7 +23,7 @@ namespace ConsoleApp1
 
 			GremlinHandler gremlinHandler = new(gremlinSettings);
 
-			TestUntypedList(gremlinHandler);
+			TestDictionaryUseCase(gremlinHandler);
 
 			gremlinHandler.Dispose();
 		}
@@ -87,6 +87,51 @@ namespace ConsoleApp1
 			Console.ForegroundColor = foregroundColor;
 			Console.WriteLine();
 			Console.WriteLine($"Returned {searchResults.Count} colors");
+
+		}
+
+		static void TestDictionary(GremlinHandler gremlinHandler)
+		{
+			Dictionary<string, List<IEntity>> searchResults = gremlinHandler.GetDictionary("g.V().or(has('name', containing('1026')),has('setNumber', containing('1026')),has('partNumber', containing('1026')))");
+			ConsoleColor foregroundColor = Console.ForegroundColor;
+			int returnedEntities = 0;
+			foreach (KeyValuePair<string, List<IEntity>> searchResult in searchResults)
+			{
+				switch (searchResult.Key)
+				{
+					case Discriminators.Part:
+						Console.ForegroundColor = ConsoleColor.Red;
+						foreach (IEntity entity in searchResult.Value)
+						{
+							Part part = (Part)entity;
+							Console.WriteLine($"{part.PartNumber}\t{part.Name}");
+							returnedEntities++;
+						}
+						break;
+					case Discriminators.Set:
+						Console.ForegroundColor = ConsoleColor.Yellow;
+						foreach (IEntity entity in searchResult.Value)
+						{
+							Set set = (Set)entity;
+							Console.WriteLine($"{set.SetNumber}\t{set.Name}");
+							returnedEntities++;
+						}
+						break;
+				}
+
+			}
+
+			Console.ForegroundColor = foregroundColor;
+			Console.WriteLine();
+			Console.WriteLine($"Returned {searchResults.Count} entity types and {returnedEntities} entities");
+
+		}
+
+		static void TestDictionaryUseCase(GremlinHandler gremlinHandler)
+		{
+			Dictionary<string, List<IEntity>> searchResults = gremlinHandler.GetDictionary("g.V().or(has('name', containing('1026')),has('setNumber', containing('1026')),has('partNumber', containing('1026')))");
+			Console.WriteLine($"Sets Returned: {searchResults[Discriminators.Set].Count}");
+			Console.WriteLine($"Parts Returned: {searchResults[Discriminators.Part].Count}");
 
 		}
 

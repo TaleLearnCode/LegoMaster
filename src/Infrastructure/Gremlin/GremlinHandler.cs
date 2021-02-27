@@ -102,7 +102,7 @@ namespace TaleLearnCode.LEGOMaster.Infrastructure.Gremlin
 
 		public List<T> GetList<T>(string query) where T : class
 		{
-		
+
 			List<T> results = new();
 			ResultSet<dynamic> resultSet = SubmitRequest(query).Result;
 			if (resultSet.Any())
@@ -132,7 +132,7 @@ namespace TaleLearnCode.LEGOMaster.Infrastructure.Gremlin
 				}
 
 			return results;
-		
+
 		}
 
 		public List<IEntity> GetList(string query)
@@ -167,6 +167,61 @@ namespace TaleLearnCode.LEGOMaster.Infrastructure.Gremlin
 				}
 
 			return results;
+		}
+
+		public Dictionary<string, List<IEntity>> GetDictionary(string query)
+		{
+
+			Dictionary<string, List<IEntity>> results = new();
+			ResultSet<dynamic> resultSet = SubmitRequest(query).Result;
+			if (resultSet.Any())
+				foreach (var result in resultSet)
+				{
+					string json = JsonSerializer.Serialize(result);
+					GremlinObjectBase baseObject = JsonSerializer.Deserialize<GremlinObjectBase>(json);
+					if (baseObject != null)
+						switch (baseObject.Label)
+						{
+							case GremlinLabels.Category:
+								Category category = CategoryVertex.DeserializeAsCategory(json);
+								if (!results.ContainsKey(Discriminators.Category))
+									results.Add(Discriminators.Category, new List<IEntity> { category });
+								else
+									results[Discriminators.Category].Add(category);
+								break;
+							case GremlinLabels.Color:
+								Color color = ColorVertex.DeserializeAsColor(json);
+								if (!results.ContainsKey(Discriminators.Color))
+									results.Add(Discriminators.Color, new List<IEntity> { color });
+								else
+									results[Discriminators.Color].Add(color);
+								break;
+							case GremlinLabels.Part:
+								Part part = PartVertex.DeserializeAsPart(json);
+								if (!results.ContainsKey(Discriminators.Part))
+									results.Add(Discriminators.Part, new List<IEntity> { part });
+								else
+									results[Discriminators.Part].Add(part);
+								break;
+							case GremlinLabels.Set:
+								Set set = SetVertex.DeserializeAsSet(json);
+								if (!results.ContainsKey(Discriminators.Set))
+									results.Add(Discriminators.Set, new List<IEntity> { set });
+								else
+									results[Discriminators.Set].Add(set);
+								break;
+							case GremlinLabels.Theme:
+								Theme theme = ThemeVertex.DeserializeAsTheme(json);
+								if (!results.ContainsKey(Discriminators.Theme))
+									results.Add(Discriminators.Theme, new List<IEntity> { theme });
+								else
+									results[Discriminators.Theme].Add(theme);
+								break;
+						}
+				}
+
+			return results;
+
 		}
 
 		private Task<ResultSet<dynamic>> SubmitRequest(string query)
