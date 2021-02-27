@@ -4,6 +4,7 @@ using System.Reflection;
 using TaleLearnCode.LEGOMaster.DataImport;
 using TaleLearnCode.LEGOMaster.Domain;
 using TaleLearnCode.LEGOMaster.Infrastructure.Gremlin;
+using TaleLearnCode.LEGOMaster.Infrastructure.Services;
 
 namespace ConsoleApp1
 {
@@ -23,7 +24,7 @@ namespace ConsoleApp1
 
 			GremlinHandler gremlinHandler = new(gremlinSettings);
 
-			TestDictionaryUseCase(gremlinHandler);
+			TestPartSearch(gremlinHandler);
 
 			gremlinHandler.Dispose();
 		}
@@ -133,6 +134,16 @@ namespace ConsoleApp1
 			Console.WriteLine($"Sets Returned: {searchResults[Discriminators.Set].Count}");
 			Console.WriteLine($"Parts Returned: {searchResults[Discriminators.Part].Count}");
 
+		}
+
+		static void TestPartSearch(GremlinHandler gremlinHandler)
+		{
+			SearchService searchService = new(gremlinHandler);
+			List<Part> parts = searchService.SearchParts("3004");
+			foreach (Part part in parts)
+			{
+				Console.WriteLine($"{part.PartNumber} :: {part.Name}");
+			}
 		}
 
 	}
