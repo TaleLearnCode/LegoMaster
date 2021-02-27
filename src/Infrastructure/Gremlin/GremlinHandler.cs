@@ -88,8 +88,13 @@ namespace TaleLearnCode.LEGOMaster.Infrastructure.Gremlin
 							GremlinLabels.Category => CategoryVertex.DeserializeAsCategory(json) as T,
 							GremlinLabels.Color => ColorVertex.DeserializeAsColor(json) as T,
 							GremlinLabels.Part => PartVertex.DeserializeAsPart(json) as T,
+							GremlinLabels.Set => SetVertex.DeserializeAsSet(json) as T,
+							GremlinLabels.Theme => ThemeVertex.DeserializeAsTheme(json) as T,
 							_ => default,
 						};
+
+
+
 					}
 
 
@@ -99,7 +104,7 @@ namespace TaleLearnCode.LEGOMaster.Infrastructure.Gremlin
 					//string output = JsonConvert.SerializeObject(result);
 					//returnValue = new T();
 				}
-				return default;
+				//return default;
 			}
 			return default;
 		}

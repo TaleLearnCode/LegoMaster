@@ -7,5 +7,7 @@
 		internal const string Category = "category";
 		internal const string Color = "color";
 		internal const string Part = "part";
+		internal const string Set = "set";
+		internal const string Theme = "theme";
 	}
 }
