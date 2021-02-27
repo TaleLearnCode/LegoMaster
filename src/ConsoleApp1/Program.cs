@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Reflection;
 using TaleLearnCode.LEGOMaster.DataImport;
 using TaleLearnCode.LEGOMaster.Domain;
@@ -21,6 +22,14 @@ namespace ConsoleApp1
 			};
 
 			GremlinHandler gremlinHandler = new(gremlinSettings);
+
+			TestTypedList(gremlinHandler);
+
+			gremlinHandler.Dispose();
+		}
+
+		static void TestFirstOrDefault(GremlinHandler gremlinHandler)
+		{
 			//GremlinObjectBase vertex = gremlinHandler.GetFirstOrDefault<GremlinObjectBase>("g.V().has('setNumber', '10264-1')");
 			//Category vertex = gremlinHandler.GetFirstOrDefault<Category>("g.V().hasLabel('category').has('rebrickableId', '1')");
 			//Color vertex = gremlinHandler.GetFirstOrDefault<Color>("g.V('57fc1784-ce95-4829-bd21-2b37ba4c0c5c')");
@@ -28,7 +37,6 @@ namespace ConsoleApp1
 			//Part vertex = gremlinHandler.GetFirstOrDefault<Part>("g.V('24362868-c754-4aa0-980f-a7f5aa83e044').hasLabel('part')");
 			//Set vertex = gremlinHandler.GetFirstOrDefault<Set>("g.V().hasLabel('set').has('setNumber', '10246-1')");
 			Theme vertex = gremlinHandler.GetFirstOrDefault<Theme>("g.V().hasLabel('theme').has('rebrickableId', '227')");
-
 
 			ConsoleColor foregroundColor = Console.ForegroundColor;
 			PropertyInfo[] vertexPropertyInfo = vertex.GetType().GetProperties();
@@ -46,8 +54,16 @@ namespace ConsoleApp1
 				}
 			}
 
+		}
 
-			gremlinHandler.Dispose();
+		static void TestTypedList(GremlinHandler gremlinHandler)
+		{
+			List<Color> colors = gremlinHandler.GetList<Color>("g.V().hasLabel('color').has('isTranslucent', 'True')");
+			foreach (Color color in colors)
+				Console.WriteLine(color.Name);
+			Console.WriteLine();
+			Console.WriteLine($"Returned {colors.Count} colors");
+
 		}
 	}
 }

@@ -1,6 +1,7 @@
 ﻿using Gremlin.Net.Driver;
 using Gremlin.Net.Structure.IO.GraphSON;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.WebSockets;
 using System.Text.Json;
@@ -92,21 +93,43 @@ namespace TaleLearnCode.LEGOMaster.Infrastructure.Gremlin
 							GremlinLabels.Theme => ThemeVertex.DeserializeAsTheme(json) as T,
 							_ => default,
 						};
-
-
-
 					}
-
-
-
-
-
-					//string output = JsonConvert.SerializeObject(result);
-					//returnValue = new T();
 				}
-				//return default;
 			}
 			return default;
+		}
+
+		public List<T> GetList<T>(string query) where T : class
+		{
+			List<T> results = new();
+			ResultSet<dynamic> resultSet = SubmitRequest(query).Result;
+			if (resultSet.Any())
+				foreach (var result in resultSet)
+				{
+					string json = JsonSerializer.Serialize(result);
+					GremlinObjectBase baseObject = JsonSerializer.Deserialize<GremlinObjectBase>(json);
+					if (baseObject != null)
+						switch (baseObject.Label)
+						{
+							case GremlinLabels.Category:
+								results.Add(CategoryVertex.DeserializeAsCategory(json) as T);
+								break;
+							case GremlinLabels.Color:
+								results.Add(ColorVertex.DeserializeAsColor(json) as T);
+								break;
+							case GremlinLabels.Part:
+								results.Add(PartVertex.DeserializeAsPart(json) as T);
+								break;
+							case GremlinLabels.Set:
+								results.Add(SetVertex.DeserializeAsSet(json) as T);
+								break;
+							case GremlinLabels.Theme:
+								results.Add(ThemeVertex.DeserializeAsTheme(json) as T);
+								break;
+						}
+				}
+
+			return results;
 		}
 
 		private Task<ResultSet<dynamic>> SubmitRequest(string query)
