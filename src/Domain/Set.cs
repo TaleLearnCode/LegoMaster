@@ -1,11 +1,13 @@
 ﻿namespace TaleLearnCode.LEGOMaster.Domain
 {
-	public class Set
+	public class Set : IEntity
 	{
 
 		public string Id { get; set; }
 
 		public string UserId { get; set; }
+
+		public string Discriminator => Discriminators.Set;
 
 		public string SetNumber { get; set; }
 
